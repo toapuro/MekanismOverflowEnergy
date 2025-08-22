@@ -31,18 +31,7 @@ public class OverflowableForgeStrictEnergyHandler implements IStrictEnergyHandle
 
     @Override
     public @NotNull FloatingLong getEnergy(int container) {
-        FloatingLong totalEnergy = FloatingLong.create(0);
-
-        for (int i = 0; i < maxOperationCountSup.getAsInt(); i++) {
-            int extracted = storage.extractEnergy(Integer.MAX_VALUE, true);
-
-            totalEnergy.plusEqual(extracted);
-            if (extracted != Integer.MAX_VALUE) {
-                return totalEnergy;
-            }
-        }
-
-        return container == 0 ? UnitDisplayUtils.EnergyUnit.FORGE_ENERGY.convertFrom(totalEnergy) : FloatingLong.ZERO;
+        return container == 0 ? UnitDisplayUtils.EnergyUnit.FORGE_ENERGY.convertFrom(this.storage.getEnergyStored()) : FloatingLong.ZERO;
     }
 
     @Override
@@ -51,12 +40,16 @@ public class OverflowableForgeStrictEnergyHandler implements IStrictEnergyHandle
 
     @Override
     public @NotNull FloatingLong getMaxEnergy(int container) {
+        if (container != 0) {
+            return FloatingLong.ZERO;
+        }
+
         int maxEnergyInt = this.storage.getMaxEnergyStored();
         if (maxEnergyInt == Integer.MAX_VALUE) {
             return FloatingLong.MAX_VALUE;
         }
 
-        return container == 0 ? UnitDisplayUtils.EnergyUnit.FORGE_ENERGY.convertFrom(maxEnergyInt) : FloatingLong.ZERO;
+        return UnitDisplayUtils.EnergyUnit.FORGE_ENERGY.convertFrom(maxEnergyInt);
     }
 
     @Override
@@ -75,26 +68,22 @@ public class OverflowableForgeStrictEnergyHandler implements IStrictEnergyHandle
             return amount;
         }
 
-        if (feAmount.greaterOrEqual(INT_MAX)) {
-            if (action.simulate()) {
-                return FloatingLong.ZERO;
-            }
-
+        if (feAmount.greaterOrEqual(INT_MAX) && action.execute()) {
             FloatingLong remainEnergy = feAmount.copy();
             for (int i = 0; i < maxOperationCountSup.getAsInt(); i++) {
-                int received = this.storage.receiveEnergy(remainEnergy.intValue(), action.simulate());
-                remainEnergy.minusEqual(UnitDisplayUtils.EnergyUnit.FORGE_ENERGY.convertFrom(received));
-
-                if (received != Integer.MAX_VALUE) {
+                int toInsert = remainEnergy.intValue();
+                if (toInsert == 0) {
                     break;
                 }
+
+                int received = this.storage.receiveEnergy(toInsert, action.simulate());
+                remainEnergy.minusEqual(UnitDisplayUtils.EnergyUnit.FORGE_ENERGY.convertFrom(received));
             }
 
             return remainEnergy;
-        } else {
-            int received = this.storage.receiveEnergy(feAmount.intValue(), action.simulate());
-            return UnitDisplayUtils.EnergyUnit.FORGE_ENERGY.convertFrom(received);
         }
+        int received = this.storage.receiveEnergy(feAmount.intValue(), action.simulate());
+        return feAmount.subtract(UnitDisplayUtils.EnergyUnit.FORGE_ENERGY.convertFrom(received));
     }
 
     @Override
@@ -108,14 +97,10 @@ public class OverflowableForgeStrictEnergyHandler implements IStrictEnergyHandle
             return FloatingLong.ZERO;
         }
 
-        if (feAmount.greaterOrEqual(INT_MAX)) {
-            if (action.simulate()) {
-                return FloatingLong.MAX_VALUE;
-            }
-
-            FloatingLong totalExtracted = FloatingLong.createConst(0);
+        if (feAmount.greaterOrEqual(INT_MAX) && action.execute()) {
+            FloatingLong totalExtracted = FloatingLong.create(0);
             for (int i = 0; i < maxOperationCountSup.getAsInt(); i++) {
-                int extractedInt = this.storage.extractEnergy(amount.subtract(totalExtracted).intValue(), action.simulate());
+                int extractedInt = this.storage.extractEnergy(feAmount.subtract(totalExtracted).intValue(), action.simulate());
                 totalExtracted.plusEqual(UnitDisplayUtils.EnergyUnit.FORGE_ENERGY.convertFrom(extractedInt));
 
                 if (extractedInt != Integer.MAX_VALUE) {
@@ -124,9 +109,8 @@ public class OverflowableForgeStrictEnergyHandler implements IStrictEnergyHandle
             }
 
             return totalExtracted;
-        } else {
-            int extracted = this.storage.extractEnergy(feAmount.intValue(), action.simulate());
-            return UnitDisplayUtils.EnergyUnit.FORGE_ENERGY.convertFrom(extracted);
         }
+        int extracted = this.storage.extractEnergy(feAmount.intValue(), action.simulate());
+        return UnitDisplayUtils.EnergyUnit.FORGE_ENERGY.convertFrom(extracted);
     }
 }
