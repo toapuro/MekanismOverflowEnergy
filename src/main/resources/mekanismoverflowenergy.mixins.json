@@ -1,0 +1,18 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.toapuro.mekanismoverflowenergy.mixin",
+  "compatibilityLevel": "JAVA_8",
+  "refmap": "mekanismoverflowenergy.refmap.json",
+  "mixins": [
+    "ForgeEnergyCompatMixin"
+  ],
+  "client": [
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "overwrites": {
+    "requireAnnotations": true
+  }
+}
