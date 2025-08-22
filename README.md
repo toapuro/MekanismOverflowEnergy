@@ -12,7 +12,3 @@ config/mekanismoverflowenergy-common.toml
 
 `maxOperationCount` - the maximum number of repeated transfers
 (default: 256)
-
-This means the effective maximum transfer per tick is:
-
-`Integer.MAX_VALUE * maxOperationCount`
