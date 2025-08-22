@@ -78,6 +78,10 @@ public class OverflowableForgeStrictEnergyHandler implements IStrictEnergyHandle
 
                 int received = this.storage.receiveEnergy(toInsert, action.simulate());
                 remainEnergy.minusEqual(UnitDisplayUtils.EnergyUnit.FORGE_ENERGY.convertFrom(received));
+
+                if (received == 0) {
+                    return remainEnergy;
+                }
             }
 
             return remainEnergy;
@@ -107,6 +111,10 @@ public class OverflowableForgeStrictEnergyHandler implements IStrictEnergyHandle
 
                 int extractedInt = this.storage.extractEnergy(toExtract, action.simulate());
                 totalExtracted.plusEqual(UnitDisplayUtils.EnergyUnit.FORGE_ENERGY.convertFrom(extractedInt));
+
+                if (extractedInt == toExtract) {
+                    return totalExtracted;
+                }
             }
 
             return totalExtracted;
