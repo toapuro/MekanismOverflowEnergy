@@ -100,12 +100,13 @@ public class OverflowableForgeStrictEnergyHandler implements IStrictEnergyHandle
         if (feAmount.greaterOrEqual(INT_MAX) && action.execute()) {
             FloatingLong totalExtracted = FloatingLong.create(0);
             for (int i = 0; i < maxOperationCountSup.getAsInt(); i++) {
-                int extractedInt = this.storage.extractEnergy(feAmount.subtract(totalExtracted).intValue(), action.simulate());
-                totalExtracted.plusEqual(UnitDisplayUtils.EnergyUnit.FORGE_ENERGY.convertFrom(extractedInt));
-
-                if (extractedInt != Integer.MAX_VALUE) {
+                int toExtract = feAmount.subtract(totalExtracted).intValue();
+                if (toExtract == 0) {
                     break;
                 }
+
+                int extractedInt = this.storage.extractEnergy(toExtract, action.simulate());
+                totalExtracted.plusEqual(UnitDisplayUtils.EnergyUnit.FORGE_ENERGY.convertFrom(extractedInt));
             }
 
             return totalExtracted;
