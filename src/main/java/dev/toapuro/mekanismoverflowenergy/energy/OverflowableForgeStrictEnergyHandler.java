@@ -4,38 +4,42 @@ import dev.toapuro.mekanismoverflowenergy.Config;
 import mekanism.api.Action;
 import mekanism.api.energy.IStrictEnergyHandler;
 import mekanism.api.math.FloatingLong;
-import mekanism.common.util.UnitDisplayUtils;
 import net.minecraftforge.energy.IEnergyStorage;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.function.IntSupplier;
 
 public class OverflowableForgeStrictEnergyHandler implements IStrictEnergyHandler {
-    private static final FloatingLong INT_MAX = FloatingLong.createConst(Integer.MAX_VALUE);
-    private static final IntSupplier maxOperationCountSup = () -> Config.maxOperationCount.get();
+    private static final FloatingLong INT_MAX_J = FloatingLong.createConst(Integer.MAX_VALUE);
+    private static final IntSupplier maxOperationCount = () -> Config.maxOperationCount.get();
 
+    @Nullable
     private final IEnergyStorage storage;
+    private final IStrictEnergyHandler handler;
 
-    OverflowableForgeStrictEnergyHandler(IEnergyStorage storage) {
+    OverflowableForgeStrictEnergyHandler(@Nullable IEnergyStorage storage, IStrictEnergyHandler handler) {
         this.storage = storage;
+        this.handler = handler;
     }
 
-    public static OverflowableForgeStrictEnergyHandler wrap(IEnergyStorage storage) {
-        return new OverflowableForgeStrictEnergyHandler(storage);
+    public static OverflowableForgeStrictEnergyHandler wrap(@Nullable IEnergyStorage storage, IStrictEnergyHandler handler) {
+        return new OverflowableForgeStrictEnergyHandler(storage, handler);
     }
 
     @Override
     public int getEnergyContainerCount() {
-        return 1;
+        return this.handler.getEnergyContainerCount();
     }
 
     @Override
     public @NotNull FloatingLong getEnergy(int container) {
-        return container == 0 ? UnitDisplayUtils.EnergyUnit.FORGE_ENERGY.convertFrom(this.storage.getEnergyStored()) : FloatingLong.ZERO;
+        return this.handler.getEnergy(container);
     }
 
     @Override
     public void setEnergy(int container, @NotNull FloatingLong energy) {
+        this.handler.setEnergy(container, energy);
     }
 
     @Override
@@ -44,12 +48,14 @@ public class OverflowableForgeStrictEnergyHandler implements IStrictEnergyHandle
             return FloatingLong.ZERO;
         }
 
-        int maxEnergyInt = this.storage.getMaxEnergyStored();
-        if (maxEnergyInt == Integer.MAX_VALUE) {
+        FloatingLong maxEnergy = this.handler.getMaxEnergy(container);
+
+        // When the energy storage capacity is INT_MAX, it appears to be the maximum capacity for Long
+        if (this.storage != null && this.storage.getMaxEnergyStored() == Integer.MAX_VALUE) {
             return FloatingLong.MAX_VALUE;
         }
 
-        return UnitDisplayUtils.EnergyUnit.FORGE_ENERGY.convertFrom(maxEnergyInt);
+        return maxEnergy;
     }
 
     @Override
@@ -59,67 +65,61 @@ public class OverflowableForgeStrictEnergyHandler implements IStrictEnergyHandle
 
     @Override
     public @NotNull FloatingLong insertEnergy(int container, @NotNull FloatingLong amount, @NotNull Action action) {
-        if (!(container == 0 && this.storage.canReceive())) {
+        if (!(container == 0 && (this.storage != null && this.storage.canReceive()))) {
             return amount;
         }
 
-        FloatingLong feAmount = UnitDisplayUtils.EnergyUnit.FORGE_ENERGY.convertTo(amount);
-        if (feAmount.smallerOrEqual(FloatingLong.ZERO)) {
-            return amount;
-        }
+        if (amount.greaterOrEqual(INT_MAX_J)) {
+            // In the simulation, it pretends to have inserted everything
+            if(action.simulate()) return FloatingLong.ZERO;
 
-        if (feAmount.greaterOrEqual(INT_MAX) && action.execute()) {
-            FloatingLong remainEnergy = feAmount.copy();
-            for (int i = 0; i < maxOperationCountSup.getAsInt(); i++) {
-                int toInsert = remainEnergy.intValue();
-                if (toInsert == 0) {
+            FloatingLong toInsert = amount.copy();
+            for (int i = 0; i < maxOperationCount.getAsInt(); i++) {
+                if (toInsert.isZero()) {
                     break;
                 }
 
-                int received = this.storage.receiveEnergy(toInsert, action.simulate());
-                remainEnergy.minusEqual(UnitDisplayUtils.EnergyUnit.FORGE_ENERGY.convertFrom(received));
+                FloatingLong lastEnergy = toInsert.copy();
+                toInsert = this.handler.insertEnergy(toInsert, action);
 
-                if (received == 0) {
-                    return remainEnergy;
+                if(lastEnergy.equals(toInsert)) {
+                    break;
                 }
             }
 
-            return remainEnergy;
+            return toInsert;
         }
-        int received = this.storage.receiveEnergy(feAmount.intValue(), action.simulate());
-        return feAmount.subtract(UnitDisplayUtils.EnergyUnit.FORGE_ENERGY.convertFrom(received));
+
+        return this.handler.insertEnergy(amount, action);
     }
 
     @Override
     public @NotNull FloatingLong extractEnergy(int container, @NotNull FloatingLong amount, @NotNull Action action) {
-        if (!(container == 0 && this.storage.canExtract())) {
+        if (!(container == 0 && (this.storage != null && this.storage.canExtract()))) {
             return FloatingLong.ZERO;
         }
 
-        FloatingLong feAmount = UnitDisplayUtils.EnergyUnit.FORGE_ENERGY.convertTo(amount);
-        if (feAmount.smallerOrEqual(FloatingLong.ZERO)) {
-            return FloatingLong.ZERO;
-        }
+        if (amount.greaterOrEqual(INT_MAX_J)) {
+            // In the simulation, it pretends to have extracted everything
+            if(action.simulate()) return amount;
 
-        if (feAmount.greaterOrEqual(INT_MAX) && action.execute()) {
-            FloatingLong totalExtracted = FloatingLong.create(0);
-            for (int i = 0; i < maxOperationCountSup.getAsInt(); i++) {
-                int toExtract = feAmount.subtract(totalExtracted).intValue();
-                if (toExtract == 0) {
-                    break;
+            FloatingLong toExtract = amount.copy();
+
+            for (int i = 0; i < maxOperationCount.getAsInt(); i++) {
+                if (toExtract.smallerOrEqual(FloatingLong.ZERO)) {
+                    return amount;
                 }
 
-                int extractedInt = this.storage.extractEnergy(toExtract, action.simulate());
-                totalExtracted.plusEqual(UnitDisplayUtils.EnergyUnit.FORGE_ENERGY.convertFrom(extractedInt));
+                FloatingLong extracted = this.handler.extractEnergy(toExtract, action);
+                toExtract.minusEqual(extracted);
 
-                if (extractedInt == toExtract) {
-                    return totalExtracted;
+                if(extracted.isZero()) {
+                    break;
                 }
             }
 
-            return totalExtracted;
+            return amount.subtract(toExtract);
         }
-        int extracted = this.storage.extractEnergy(feAmount.intValue(), action.simulate());
-        return UnitDisplayUtils.EnergyUnit.FORGE_ENERGY.convertFrom(extracted);
+        return this.handler.extractEnergy(container, amount, action);
     }
 }
