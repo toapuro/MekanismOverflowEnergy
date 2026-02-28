@@ -27,12 +27,19 @@ java {
     toolchain.languageVersion = JavaLanguageVersion.of(17)
 }
 
+sourceSets {
+    gameTest {
+        java.srcDir("src/gametest/java")
+
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
+    }
+}
+
 minecraft {
     mappings channel: mapping_channel, version: mapping_version
 
-
     copyIdeResources = true
-
 
     runs {
         configureEach {
@@ -61,6 +68,12 @@ minecraft {
 
         gameTestServer {
             property 'forge.enabledGameTestNamespaces', mod_id
+
+            mods {
+                "${mod_id}" {
+                    source sourceSets.gameTest
+                }
+            }
         }
 
         data {
@@ -92,8 +105,10 @@ dependencies {
     implementation fg.deobf("curse.maven:mekanism-268560:6552911")
     runtimeOnly fg.deobf("curse.maven:energymeter-532169:4813550")
 
-    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+    implementation fg.deobf("curse.maven:jade-324717:6855440")
+    implementation fg.deobf("curse.maven:mekanism-extras-1026040:6936409")
 
+    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 }
 
 tasks.named('processResources', ProcessResources).configure {
